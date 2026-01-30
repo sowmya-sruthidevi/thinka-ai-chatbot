@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Thinka AI</title>
+
+<style>
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:"Google Sans","Segoe UI",system-ui,sans-serif;
+  height:100vh;
+  display:flex;
+  background:#f8fafc;
+}
+
+/* Sidebar */
+.sidebar{
+  width:260px;
+  background:#fff;
+  border-right:1px solid #e5e7eb;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+}
+.logo{font-size:22px;font-weight:600}
+.logo span:nth-child(1){color:#4285F4}
+.logo span:nth-child(2){color:#EA4335}
+.logo span:nth-child(3){color:#FBBC05}
+.logo span:nth-child(4){color:#34A853}
+.tagline{font-size:13px;color:#6b7280;margin-bottom:14px}
+
+.new-chat{
+  background:linear-gradient(90deg,#4285F4,#34A853,#FBBC05,#EA4335);
+  color:#fff;border:none;padding:10px;border-radius:999px;
+  cursor:pointer;margin-bottom:14px;
+}
+
+.chat-list{flex:1;overflow-y:auto}
+.chat-item{
+  padding:10px 12px;border-radius:12px;
+  background:#f1f5f9;margin-bottom:8px;cursor:pointer;
+}
+.chat-item.active{
+  background:#e0edff;border-left:4px solid #4285F4;
+}
+
+.update{
+  margin-top:10px;padding:12px;border-radius:14px;
+  background:linear-gradient(135deg,#e0edff,#fef3c7,#dcfce7);
+  font-size:13px;
+}
+
+/* Main */
+.main{flex:1;display:flex;justify-content:center;align-items:center}
+.chat-container{
+  width:480px;height:640px;background:#fff;border-radius:24px;
+  box-shadow:0 20px 40px rgba(0,0,0,.08);
+  display:flex;flex-direction:column;
+}
+
+.header{
+  padding:16px;border-bottom:1px solid #e5e7eb;
+  display:flex;justify-content:space-between;
+}
+
+.messages{
+  flex:1;padding:18px;overflow-y:auto;background:#fafafa;
+}
+
+.message{
+  max-width:75%;padding:12px 16px;margin-bottom:12px;
+  border-radius:18px;font-size:14px;
+}
+.message img{max-width:100%;border-radius:12px;margin-top:6px}
+.user{margin-left:auto;color:#fff;
+  background:linear-gradient(135deg,#4285F4,#34A853)}
+.bot{background:#f1f5f9}
+
+/* Typing indicator */
+.typing{
+  background:#f1f5f9;padding:10px 14px;border-radius:18px;
+  display:flex;gap:4px;width:fit-content;margin-bottom:12px;
+}
+.dot{
+  width:6px;height:6px;background:#9ca3af;border-radius:50%;
+  animation:blink 1.4s infinite both;
+}
+.dot:nth-child(2){animation-delay:.2s}
+.dot:nth-child(3){animation-delay:.4s}
+@keyframes blink{
+  0%{opacity:.2}20%{opacity:1}100%{opacity:.2}
+}
+
+/* Input */
+.input-area{
+  padding:14px;border-top:1px solid #e5e7eb;
+  display:flex;gap:8px;align-items:center;position:relative;
+}
+.input-area input{
+  flex:1;padding:14px;border-radius:999px;
+  border:1px solid #d1d5db;
+}
+.input-area button{
+  width:44px;height:44px;border-radius:50%;
+  border:none;cursor:pointer;
+}
+.send{
+  color:#fff;
+  background:linear-gradient(135deg,#4285F4,#EA4335,#FBBC05,#34A853);
+}
+.preview{
+  width:44px;height:44px;border-radius:10px;
+  object-fit:cover;display:none;
+}
+
+/* Attachment menu */
+.attach-menu{
+  position:absolute;bottom:70px;left:10px;
+  background:#fff;border-radius:12px;
+  box-shadow:0 10px 25px rgba(0,0,0,.15);
+  padding:8px;display:none;
+}
+.attach-menu div{
+  padding:8px 10px;border-radius:8px;cursor:pointer;
+}
+.attach-menu div:hover{background:#f1f5f9}
+</style>
+</head>
+
+<body>
+
+<div class="sidebar">
+  <div class="logo"><span>T</span><span>h</span><span>i</span><span>n</span><span>ka</span></div>
+  <div class="tagline">An AI that thinks with you.</div>
+  <button class="new-chat" onclick="startNewChat()">+ New Chat</button>
+  <div class="chat-list" id="chatList"></div>
+  <div class="update" id="dailyUpdate"></div>
+</div>
+
+<div class="main">
+  <div class="chat-container">
+    <div class="header">
+      <strong>Thinka AI</strong>
+      <button onclick="clearChat()">Clear</button>
+    </div>
+
+    <div class="messages" id="messages"></div>
+
+    <div class="input-area">
+      <img id="preview" class="preview">
+      <button onclick="toggleAttach()">➕</button>
+
+      <div id="attachMenu" class="attach-menu">
+        <div onclick="pickImage()">🖼️ Image</div>
+        <div onclick="pickFile()">📁 File</div>
+        <div onclick="openCamera()">📷 Camera</div>
+      </div>
+
+      <button onclick="startMic()">🎤</button>
+      <input id="msg" placeholder="Ask anything..."
+        onkeydown="if(event.key==='Enter') send()">
+      <button class="send" onclick="send()">➤</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="image/*,.pdf,.txt" hidden>
+
+<script>
+let chats = JSON.parse(localStorage.getItem("chats")) || {};
+let activeChatId = null;
+let attachment = null;
+
+const messagesDiv = document.getElementById("messages");
+const chatListDiv = document.getElementById("chatList");
+const previewImg = document.getElementById("preview");
+
+/* Utils */
+function timeNow(){
+  return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+}
+function saveAll(){
+  localStorage.setItem("chats", JSON.stringify(chats));
+}
+
+/* Sidebar */
+function renderSidebar(){
+  chatListDiv.innerHTML="";
+  Object.keys(chats).forEach(id=>{
+    if(chats[id].messages.length===0) return;
+    const d=document.createElement("div");
+    d.className="chat-item"+(id===activeChatId?" active":"");
+    d.innerText=chats[id].title;
+    d.onclick=()=>loadChat(id);
+    chatListDiv.appendChild(d);
+  });
+}
+
+/* Messages */
+function renderMessages(){
+  messagesDiv.innerHTML="";
+  if(!activeChatId) return;
+  chats[activeChatId].messages.forEach(m=>{
+    const d=document.createElement("div");
+    d.className="message "+m.role;
+    if(m.text) d.innerHTML+=m.text;
+    if(m.image) d.innerHTML+=`<img src="${m.image}">`;
+    messagesDiv.appendChild(d);
+  });
+  messagesDiv.scrollTop=messagesDiv.scrollHeight;
+}
+
+/* Chat */
+function startNewChat(){
+  activeChatId="chat_"+Date.now();
+  chats[activeChatId]={title:"New Chat",messages:[]};
+  saveAll();renderMessages();renderSidebar();
+}
+function loadChat(id){
+  activeChatId=id;renderMessages();renderSidebar();
+}
+
+/* Attach menu */
+function toggleAttach(){
+  const m=document.getElementById("attachMenu");
+  m.style.display=m.style.display==="block"?"none":"block";
+}
+
+/* File/Image */
+function pickImage(){document.getElementById("fileInput").click()}
+function pickFile(){document.getElementById("fileInput").click()}
+document.getElementById("fileInput").onchange=e=>{
+  const f=e.target.files[0];
+  if(!f) return;
+  if(f.type.startsWith("image/")){
+    const r=new FileReader();
+    r.onload=()=>{
+      attachment=r.result;
+      previewImg.src=attachment;
+      previewImg.style.display="block";
+    };
+    r.readAsDataURL(f);
+  }else{
+    attachment={name:f.name};
+    alert("File attached: "+f.name);
+  }
+}
+
+/* Camera */
+function openCamera(){
+  navigator.mediaDevices.getUserMedia({video:true}).then(stream=>{
+    const v=document.createElement("video");
+    v.srcObject=stream;v.play();
+    setTimeout(()=>{
+      const c=document.createElement("canvas");
+      c.width=v.videoWidth;c.height=v.videoHeight;
+      c.getContext("2d").drawImage(v,0,0);
+      attachment=c.toDataURL("image/png");
+      previewImg.src=attachment;
+      previewImg.style.display="block";
+      stream.getTracks().forEach(t=>t.stop());
+    },1500);
+  });
+}
+
+/* Send */
+async function send(){
+  const input=document.getElementById("msg");
+  const text=input.value.trim();
+  if(!text && !attachment) return;
+  if(!activeChatId) startNewChat();
+
+  const chat=chats[activeChatId];
+  chat.messages.push({role:"user",text,image:attachment});
+  if(chat.messages.length===1) chat.title=text.slice(0,20)||"Media chat";
+
+  renderMessages();renderSidebar();saveAll();
+  input.value="";previewImg.style.display="none";
+  const payload=attachment;attachment=null;
+
+  // typing indicator
+  const typing=document.createElement("div");
+  typing.className="typing bot";
+  typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+  messagesDiv.appendChild(typing);
+  messagesDiv.scrollTop=messagesDiv.scrollHeight;
+
+  const res=await fetch("http://127.0.0.1:8000/chat",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({message:text,image:payload})
+  });
+  const data=await res.json();
+  typing.remove();
+
+  chat.messages.push({role:"bot",text:data.reply});
+  renderMessages();saveAll();
+}
+
+/* Mic */
+function startMic(){
+  if(!("webkitSpeechRecognition"in window)) return alert("Voice not supported");
+  const r=new webkitSpeechRecognition();
+  r.lang="en-US";r.start();
+  r.onresult=e=>document.getElementById("msg").value=e.results[0][0].transcript;
+}
+
+/* Clear */
+function clearChat(){
+  if(!activeChatId) return;
+  delete chats[activeChatId];activeChatId=null;
+  messagesDiv.innerHTML="";saveAll();renderSidebar();
+}
+
+/* Daily update */
+(function(){
+  const t=new Date().toDateString();
+  const l=localStorage.getItem("lastUpdate");
+  const b=document.getElementById("dailyUpdate");
+  if(l!==t){
+    b.innerText="✨ Thinka AI update: Typing indicator & smart attachments!";
+    localStorage.setItem("lastUpdate",t);
+  }else b.innerText="✅ You’re up to date!";
+})();
+</script>
+
+</body>
+</html>
