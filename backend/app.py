@@ -52,9 +52,9 @@ def chat(req: ChatRequest):
 
     try:
         response = requests.post(
-            "http://localhost:11434/api/generate",
+    "http://104.211.99.16:11434/api/generate",
             json={
-                "model": "phi",
+                "model": "tinyllama:latest",
                 "prompt": full_prompt,
                 "stream": False
             },
