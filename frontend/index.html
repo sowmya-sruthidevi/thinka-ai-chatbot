@@ -302,8 +302,7 @@ async function send(){
   typing.innerHTML='<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
   messagesDiv.appendChild(typing);
 
-  const res=await fetch("http://127.0.0.1:8000/chat",{
-    method:"POST",
+const res = await fetch("https://thinka-ai-chatbot-1.onrender.com/chat", {    method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({message:text,image:payload})
   });
