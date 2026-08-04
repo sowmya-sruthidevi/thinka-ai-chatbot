@@ -6,70 +6,110 @@ import requests
 
 app = FastAPI(title="Thinka AI Backend")
 
-# -----------------------------
-# Enable CORS (frontend access)
-# -----------------------------
+# ---------------------------------------
+# CORS
+# ---------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],   # Replace with your Vercel URL later
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# -----------------------------
-# Health check
-# -----------------------------
+# ---------------------------------------
+# Ollama Configuration
+# ---------------------------------------
+OLLAMA_URL = "http://104.211.99.16:11434/api/generate"
+MODEL_NAME = "phi3:mini"
+
+# ---------------------------------------
+# Health Check
+# ---------------------------------------
 @app.get("/")
 def root():
-    return {"message": "Thinka AI backend running with memory"}
+    return {
+        "status": "running",
+        "model": MODEL_NAME,
+        "message": "Thinka AI Backend is running successfully."
+    }
 
-# -----------------------------
-# Request model
-# -----------------------------
+# ---------------------------------------
+# Request Model
+# ---------------------------------------
 class ChatRequest(BaseModel):
     message: str
-    image: Optional[str] = None  # base64 or placeholder
+    image: Optional[str] = None
 
-# -----------------------------
-# In-memory chat history
-# -----------------------------
-conversation_history = []
-
-# -----------------------------
-# Chat endpoint
-# -----------------------------
+# ---------------------------------------
+# Chat Endpoint
+# ---------------------------------------
 @app.post("/chat")
 def chat(req: ChatRequest):
-    # Save user text
-    conversation_history.append(f"User: {req.message}")
 
-    # If image exists (UI feature)
-    if req.image:
-        conversation_history.append("[User sent an image]")
+    system_prompt = """
+You are Thinka AI, a friendly AI assistant.
 
-    # Build prompt with memory
-    full_prompt = "\n".join(conversation_history) + "\nAI:"
+Instructions:
+- Answer ONLY the user's current question.
+- Do NOT invent previous conversations.
+- Keep answers short unless the user asks for details.
+- If asked for a definition:
+  • Give a simple definition.
+  • Give two examples.
+- If asked programming questions:
+  • Explain clearly.
+  • Give code when appropriate.
+- If the user simply says "hi", greet them naturally.
+"""
+
+    prompt = f"""{system_prompt}
+
+User: {req.message}
+
+Assistant:
+"""
 
     try:
         response = requests.post(
-    "http://104.211.99.16:11434/api/generate",
+            OLLAMA_URL,
             json={
-                "model": "tinyllama:latest",
-                "prompt": full_prompt,
-                "stream": False
+                "model": MODEL_NAME,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.4,
+                    "num_predict": 300,
+                    "num_ctx": 2048
+                }
             },
-            timeout=60
+            timeout=180
         )
 
-        ai_reply = response.json().get(
-            "response",
-            "Sorry, I couldn't generate a response."
-        )
+        response.raise_for_status()
+
+        result = response.json()
+
+        ai_reply = result.get("response", "").strip()
+
+        if not ai_reply:
+            ai_reply = "Sorry, I couldn't generate a response."
+
+        return {
+            "reply": ai_reply
+        }
+
+    except requests.exceptions.Timeout:
+        return {
+            "reply": "⚠️ AI request timed out. Please try again."
+        }
+
+    except requests.exceptions.ConnectionError:
+        return {
+            "reply": "⚠️ Unable to connect to the AI server."
+        }
 
     except Exception as e:
-        ai_reply = "⚠️ AI service is unavailable right now."
-
-    # Save AI reply
-    conversation_history.append(f"AI: {ai_reply}")
-
-    return {"reply": ai_reply}
+        return {
+            "reply": f"⚠️ Backend Error: {str(e)}"
+        }
